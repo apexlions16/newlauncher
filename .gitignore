@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+
+# Local/private launcher state
+launcher_data/hf_settings.json
+launcher_data/odium_launcher.db
+launcher_data/catalog_cache/
+launcher_data/*.db
+launcher_data/*.sqlite
+
+# Local transfer/cache/temp files
+*.odium_part
+.odium_download_cache/
+*.tmp
+
+# Packed vault payloads should not be committed to GitHub
+*.dot
+tokenizer_shard_*/
