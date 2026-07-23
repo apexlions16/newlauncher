@@ -1,0 +1,136 @@
+name: Build FModel Voice Mapper
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout builder files
+        uses: actions/checkout@v6
+
+      - name: Clone pinned FModel source
+        shell: pwsh
+        run: |
+          git clone --recursive https://github.com/4sval/FModel.git src
+          Set-Location src
+          git checkout d1e7e8da0e5ae397272261ff0e8464d862f81040
+          git submodule update --init --recursive
+
+      - name: Apply LOCRES Voice Mapper patch
+        shell: pwsh
+        run: |
+          ./build/apply.ps1 -SourceRoot ./src
+          ./build/fix-compat.ps1 -SourceRoot ./src
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore ./src/FModel/FModel.csproj -r win-x64
+
+      - name: Build
+        shell: pwsh
+        run: |
+          dotnet build ./src/FModel/FModel.csproj -c Release -f net10.0-windows -r win-x64 --no-restore 2>&1 |
+            Tee-Object -FilePath ./build.log
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Publish self-contained Windows build
+        shell: pwsh
+        run: >
+          dotnet publish ./src/FModel/FModel.csproj
+          -c Release
+          -f net10.0-windows
+          -r win-x64
+          --self-contained true
+          --no-restore
+          -o ./publish
+          -p:PublishReadyToRun=false
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -p:AssemblyVersion=4.4.4.2
+          -p:FileVersion=4.4.4.2
+
+      - name: Windows launch smoke test
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath ./publish/FModel.exe -PassThru
+          Start-Sleep -Seconds 10
+
+          if ($process.HasExited) {
+            if ($process.ExitCode -ne 0) {
+              throw "FModel exited during the launch smoke test with code $($process.ExitCode)."
+            }
+            Write-Host "FModel started and exited cleanly during the smoke test."
+          }
+          else {
+            Stop-Process -Id $process.Id -Force
+            $process.WaitForExit()
+            Write-Host "FModel remained running for 10 seconds; launch smoke test passed."
+          }
+
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          $exe = Get-Item ./publish/FModel.exe
+          if ($exe.Length -lt 1000000) {
+            throw "FModel.exe is unexpectedly small: $($exe.Length) bytes"
+          }
+
+          Get-FileHash ./publish/FModel.exe -Algorithm SHA256 |
+            Format-List |
+            Out-File ./publish/SHA256.txt
+
+          Copy-Item ./patch/TESTING.md ./publish/TESTING.md
+
+          @"
+          Product: FModel LOCRES Voice Mapper with Multi-Signal VO Filter
+          Upstream repository: 4sval/FModel
+          Upstream commit: d1e7e8da0e5ae397272261ff0e8464d862f81040
+          Builder repository: $env:GITHUB_REPOSITORY
+          Builder commit: $env:GITHUB_SHA
+          Workflow run: $env:GITHUB_RUN_ID
+          Target: net10.0-windows / win-x64 / self-contained / single-file
+          File version: 4.4.4.2
+          VO modes: All / Balanced / Strict / Certain
+          Built at UTC: $([DateTime]::UtcNow.ToString('O'))
+          "@ | Set-Content ./publish/BUILD_INFO.txt -Encoding utf8
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ./publish/* -DestinationPath ./FModel-VoiceMapper-VOFilter-win-x64.zip -CompressionLevel Optimal
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: FModel-VoiceMapper-VOFilter-win-x64
+          path: ./FModel-VoiceMapper-VOFilter-win-x64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FModel-VoiceMapper-build-log
+          path: ./build.log
+          if-no-files-found: warn
+          retention-days: 14
