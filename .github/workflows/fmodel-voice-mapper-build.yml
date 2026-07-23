@@ -37,12 +37,12 @@ jobs:
 
       - name: Restore
         shell: pwsh
-        run: dotnet restore ./src/FModel/FModel.csproj
+        run: dotnet restore ./src/FModel/FModel.csproj -r win-x64
 
       - name: Build
         shell: pwsh
         run: |
-          dotnet build ./src/FModel/FModel.csproj -c Release -f net10.0-windows --no-restore 2>&1 |
+          dotnet build ./src/FModel/FModel.csproj -c Release -f net10.0-windows -r win-x64 --no-restore 2>&1 |
             Tee-Object -FilePath ./build.log
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
