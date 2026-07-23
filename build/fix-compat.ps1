@@ -6,9 +6,12 @@ param(
 $ErrorActionPreference = "Stop"
 $sourceRootPath = (Resolve-Path $SourceRoot).Path
 $mapperPath = Join-Path $sourceRootPath "FModel\Views\LocresVoiceMapper.cs"
+$voFilterPath = Join-Path $sourceRootPath "FModel\Views\LocresVoiceMapper.VoFilter.cs"
 
-if (-not (Test-Path $mapperPath)) {
-    throw "Mapper target not found: $mapperPath"
+foreach ($requiredPath in @($mapperPath, $voFilterPath)) {
+    if (-not (Test-Path $requiredPath)) {
+        throw "Mapper target not found: $requiredPath"
+    }
 }
 
 $content = Get-Content $mapperPath -Raw
@@ -39,6 +42,14 @@ if (-not $content.Contains($oldTraversal)) {
     throw "Newtonsoft traversal compatibility marker was not found."
 }
 $content = $content.Replace($oldTraversal, $newTraversal)
-
 Set-Content $mapperPath $content -Encoding utf8NoBOM
-Write-Host "WPF and Newtonsoft compatibility fixes applied successfully."
+
+$voFilter = Get-Content $voFilterPath -Raw
+$engineMarker = '"vehicle", "vehicles", "engine", "engines"'
+if (-not $voFilter.Contains($engineMarker)) {
+    throw "VO negative-token compatibility marker was not found."
+}
+$voFilter = $voFilter.Replace($engineMarker, '"vehicle", "vehicles"')
+Set-Content $voFilterPath $voFilter -Encoding utf8NoBOM
+
+Write-Host "WPF, Newtonsoft, and VO classifier compatibility fixes applied successfully."
