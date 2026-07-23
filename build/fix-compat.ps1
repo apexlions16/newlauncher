@@ -26,8 +26,13 @@ $oldTraversal = @'
                 .OfType<JValue>()
 '@
 $newTraversal = @'
-            return new[] { root }.Concat(root.Descendants())
-                .OfType<JValue>()
+            var values = root is JContainer container
+                ? container.DescendantsAndSelf().OfType<JValue>()
+                : root is JValue rootValue
+                    ? new[] { rootValue }
+                    : Enumerable.Empty<JValue>();
+
+            return values
 '@
 
 if (-not $content.Contains($oldTraversal)) {
