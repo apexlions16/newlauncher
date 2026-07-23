@@ -18,6 +18,29 @@ if (-not (Test-Path $mapperSource)) {
 
 Copy-Item $mapperSource $mapperTarget -Force
 
+# Resolve type-name collisions between AdonisUI and WPF, and use a token traversal
+# that is valid for both JContainer and scalar JToken roots.
+$mapper = Get-Content $mapperTarget -Raw
+$mapper = $mapper.Replace("MessageBoxButton.", "System.Windows.MessageBoxButton.")
+$mapper = $mapper.Replace("MessageBoxImage.", "System.Windows.MessageBoxImage.")
+$oldTraversal = @'
+            return root.DescendantsAndSelf()
+                .OfType<JValue>()
+'@
+$newTraversal = @'
+            IEnumerable<JToken> tokens = root is JContainer container
+                ? container.DescendantsAndSelf()
+                : new JToken[] { root };
+
+            return tokens
+                .OfType<JValue>()
+'@
+if (-not $mapper.Contains($oldTraversal)) {
+    throw "JToken traversal replacement marker was not found."
+}
+$mapper = $mapper.Replace($oldTraversal, $newTraversal)
+Set-Content $mapperTarget $mapper -Encoding utf8NoBOM
+
 $mainWindow = Get-Content $mainWindowPath -Raw
 $menuMarker = '                    <MenuItem Header="Image Merger" Command="{Binding MenuCommand}" CommandParameter="Views_ImageMerger">'
 $menuInsertion = @'
