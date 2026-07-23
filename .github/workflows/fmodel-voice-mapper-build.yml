@@ -41,7 +41,12 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: dotnet build ./src/FModel/FModel.csproj -c Release -f net10.0-windows --no-restore
+        run: |
+          dotnet build ./src/FModel/FModel.csproj -c Release -f net10.0-windows --no-restore 2>&1 |
+            Tee-Object -FilePath ./build.log
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Publish self-contained Windows build
         shell: pwsh
@@ -84,4 +89,13 @@ jobs:
           name: FModel-VoiceMapper-win-x64
           path: ./FModel-VoiceMapper-win-x64.zip
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FModel-VoiceMapper-build-log
+          path: ./build.log
+          if-no-files-found: warn
           retention-days: 14
