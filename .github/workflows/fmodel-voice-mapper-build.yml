@@ -66,6 +66,24 @@ jobs:
           -p:AssemblyVersion=4.4.4.1
           -p:FileVersion=4.4.4.1
 
+      - name: Windows launch smoke test
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath ./publish/FModel.exe -PassThru
+          Start-Sleep -Seconds 10
+
+          if ($process.HasExited) {
+            if ($process.ExitCode -ne 0) {
+              throw "FModel exited during the launch smoke test with code $($process.ExitCode)."
+            }
+            Write-Host "FModel started and exited cleanly during the smoke test."
+          }
+          else {
+            Stop-Process -Id $process.Id -Force
+            $process.WaitForExit()
+            Write-Host "FModel remained running for 10 seconds; launch smoke test passed."
+          }
+
       - name: Verify executable
         shell: pwsh
         run: |
@@ -73,10 +91,24 @@ jobs:
           if ($exe.Length -lt 1000000) {
             throw "FModel.exe is unexpectedly small: $($exe.Length) bytes"
           }
+
           Get-FileHash ./publish/FModel.exe -Algorithm SHA256 |
             Format-List |
             Out-File ./publish/SHA256.txt
+
           Copy-Item ./patch/TESTING.md ./publish/TESTING.md
+
+          @"
+          Product: FModel LOCRES Voice Mapper
+          Upstream repository: 4sval/FModel
+          Upstream commit: d1e7e8da0e5ae397272261ff0e8464d862f81040
+          Builder repository: $env:GITHUB_REPOSITORY
+          Builder commit: $env:GITHUB_SHA
+          Workflow run: $env:GITHUB_RUN_ID
+          Target: net10.0-windows / win-x64 / self-contained / single-file
+          File version: 4.4.4.1
+          Built at UTC: $([DateTime]::UtcNow.ToString('O'))
+          "@ | Set-Content ./publish/BUILD_INFO.txt -Encoding utf8
 
       - name: Package
         shell: pwsh
